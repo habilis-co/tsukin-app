@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通勤交通費申請システム</title>
+<style>
+/* ===== リセット & ベース ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+       font-size: 14px; color: #1a1a1a; background: #f5f5f5; min-height: 100vh; }
+
+/* ===== レイアウト ===== */
+.app { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+.header { display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 1.5rem; padding-bottom: 1rem;
+          border-bottom: 1px solid #e0e0e0; }
+.header h1 { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+.mode-toggle { display: flex; gap: 6px; }
+.mode-btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 8px;
+            background: transparent; cursor: pointer; font-size: 13px; color: #555; }
+.mode-btn.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+/* ===== カード ===== */
+.card { background: #fff; border: 1px solid #e8e8e8; border-radius: 12px;
+        padding: 1.25rem; margin-bottom: 1rem; }
+.sec { font-size: 11px; font-weight: 600; color: #888; letter-spacing: .07em;
+       text-transform: uppercase; margin-bottom: 10px; }
+
+/* ===== フォーム ===== */
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.full { grid-template-columns: 1fr; }
+.fg { display: flex; flex-direction: column; gap: 4px; }
+label { font-size: 13px; color: #555; }
+input, select, textarea {
+  padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 14px; width: 100%; color: #1a1a1a; background: #fafafa;
+  transition: border-color .15s; }
+input:focus, select:focus { outline: none; border-color: #1a5fa5; background: #fff; }
+input[type=number] { -moz-appearance: textfield; }
+
+/* ===== ボタン ===== */
+.btn-primary { width: 100%; padding: 11px; background: #1a5fa5; color: #fff;
+               border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+               font-weight: 600; margin-top: 8px; transition: background .15s; }
+.btn-primary:hover { background: #0c447c; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.btn-search { width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 8px;
+              background: #fff; cursor: pointer; font-size: 13px; margin-top: 4px;
+              transition: background .15s; }
+.btn-search:hover { background: #f5f5f5; }
+.btn-search:disabled { color: #aaa; cursor: not-allowed; }
+
+/* ===== ルート結果 ===== */
+.route-box { background: #f8f9fa; border-radius: 8px; padding: 1rem;
+             margin-top: 10px; display: none; }
+.route-box.show { display: block; }
+.route-head { display: flex; justify-content: space-between; align-items: baseline;
+              margin-bottom: 8px; }
+.route-fare { font-size: 18px; font-weight: 600; color: #1a5fa5; }
+.steps { list-style: none; }
+.steps li { font-size: 13px; color: #555; padding: 3px 0;
+            border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+.steps li:last-child { border-bottom: none; }
+.si { width: 18px; height: 18px; border-radius: 50%; background: #e6f1fb;
+      color: #0c447c; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; flex-shrink: 0; font-weight: 600; }
+
+/* ===== タイプ選択 ===== */
+.type-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.type-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; }
+.type-card.selected { border: 2px solid #1a5fa5; background: #e8f1fb; }
+.type-card .tc-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.type-card .tc-desc { font-size: 12px; color: #777; }
+.type-card.selected .tc-title { color: #0c447c; }
+
+/* ===== 比較パネル ===== */
+.compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 8px; margin-top: 8px; }
+.cmp-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; }
+.cmp-card.best { border: 2px solid #3b6d11; background: #eaf3de; }
+.cmp-label { font-size: 11px; color: #777; margin-bottom: 4px; }
+.cmp-amount { font-size: 17px; font-weight: 600; }
+.cmp-card.best .cmp-amount { color: #27500a; }
+.best-badge { display: inline-block; background: #eaf3de; color: #27500a;
+              font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; margin-top: 3px; }
+.cmp-note { font-size: 11px; color: #999; margin-top: 2px; }
+
+/* ===== 定期セクション ===== */
+.teiki-section { display: none; margin-top: 12px; }
+.teiki-section.show { display: block; }
+.period-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.ptab { padding: 5px 14px; border: 1px solid #ccc; border-radius: 8px;
+        background: transparent; cursor: pointer; font-size: 13px; color: #555; }
+.ptab.active { background: #1a5fa5; color: #fff; border-color: #1a5fa5; }
+
+/* ===== サマリー ===== */
+.summary-area { background: #f8f9fa; border-radius: 8px; padding: 10px; margin-top: 10px; }
+.sum-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+.sum-row.total { font-weight: 600; border-top: 1px solid #e0e0e0;
+                 margin-top: 4px; padding-top: 6px; font-size: 15px; }
+.divider { height: 1px; background: #eee; margin: 12px 0; }
+
+/* ===== バッジ ===== */
+.badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.bp { background: #faeeda; color: #854f0b; }
+.ba { background: #eaf3de; color: #3b6d11; }
+.br { background: #fcebeb; color: #a32d2d; }
+
+/* ===== 管理者テーブル ===== */
+.smr { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1rem; }
+.sc { background: #fff; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; }
+.sc .sl { font-size: 12px; color: #777; margin-bottom: 4px; }
+.sc .sv { font-size: 20px; font-weight: 600; }
+.sv-blue { color: #1a5fa5; } .sv-amber { color: #854f0b; } .sv-green { color: #3b6d11; }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+th { text-align: left; padding: 8px; border-bottom: 1px solid #eee; color: #777;
+     font-weight: 600; white-space: nowrap; }
+td { padding: 9px 8px; border-bottom: 1px solid #f0f0f0;
+     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+.ab { display: flex; gap: 5px; }
+.bok { padding: 4px 10px; border-radius: 6px; background: #eaf3de; color: #3b6d11;
+       border: 1px solid #c0dd97; cursor: pointer; font-size: 12px; }
+.bng { padding: 4px 10px; border-radius: 6px; background: #fcebeb; color: #a32d2d;
+       border: 1px solid #f7c1c1; cursor: pointer; font-size: 12px; }
+.bok:hover { background: #c0dd97; } .bng:hover { background: #f7c1c1; }
+.empty { text-align: center; padding: 2rem; color: #aaa; }
+
+/* ===== ジョブカン連携 ===== */
+.jc-panel { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 10px;
+            padding: 1.25rem; margin-top: 1rem; }
+.jc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.jc-logo { width: 32px; height: 32px; border-radius: 8px; background: #1a5fa5;
+           display: flex; align-items: center; justify-content: center;
+           font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.filter-row label { font-size: 13px; color: #555; white-space: nowrap; }
+.filter-row select, .filter-row input { width: auto; }
+.btn-outline { padding: 7px 14px; border: 1px solid #ccc; border-radius: 8px;
+               background: #fff; cursor: pointer; font-size: 13px; }
+.btn-outline:hover { background: #f5f5f5; }
+.preview-box { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+               padding: 1rem; margin-top: 8px; }
+.csv-pre { font-family: 'Courier New', monospace; font-size: 11px; color: #666;
+           line-height: 1.7; overflow-x: auto; white-space: pre;
+           max-height: 160px; overflow-y: auto; }
+.btn-dl { width: 100%; padding: 10px; background: #1a5fa5; color: #fff;
+          border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+          font-weight: 600; margin-top: 10px; }
+.btn-dl:hover { background: #0c447c; }
+.btn-dl:disabled { background: #ccc; cursor: not-allowed; }
+.count-pill { display: inline-block; background: #e6f1fb; color: #0c447c;
+              font-size: 12px; font-weight: 600; padding: 2px 10px;
+              border-radius: 20px; margin-left: 6px; }
+.warn-box { background: #faeeda; border-radius: 8px; padding: 10px 12px;
+            margin-top: 8px; font-size: 12px; color: #854f0b; }
+.info-box { background: #e6f1fb; border-radius: 8px; padding: 10px 12px;
+            margin-top: 8px; font-size: 12px; color: #0c447c; }
+
+/* ===== モーダル ===== */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45);
+            display: flex; align-items: center; justify-content: center; z-index: 50;
+            display: none; }
+.modal-bg.show { display: flex; }
+.modal { background: #fff; border-radius: 12px; padding: 1.5rem;
+         width: 90%; max-width: 480px; }
+.modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 14px; }
+.modal-row { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0;
+             border-bottom: 1px solid #f0f0f0; }
+.modal-row:last-of-type { border-bottom: none; }
+.modal-row .ml { color: #777; }
+.modal-actions { display: flex; gap: 8px; margin-top: 14px; }
+.modal-actions button { flex: 1; padding: 9px; border-radius: 8px; cursor: pointer;
+                        font-size: 13px; font-weight: 600; border: none; }
+.btn-modal-ok { background: #eaf3de; color: #3b6d11; }
+.btn-modal-ng { background: #fcebeb; color: #a32d2d; }
+.btn-modal-close { background: #f0f0f0; color: #555; }
+.modal-actions textarea { width: 100%; margin-top: 8px; }
+
+/* ===== ローディング ===== */
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd;
+           border-top-color: #1a5fa5; border-radius: 50%;
+           animation: spin .6s linear infinite; vertical-align: middle; margin-right: 5px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== トースト ===== */
+.toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff;
+         padding: 10px 16px; border-radius: 8px; font-size: 13px; display: none; z-index: 99; }
+.toast.show { display: block; }
+
+/* ===== GAS URL 未設定 警告 ===== */
+.setup-warn { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;
+              padding: 12px 16px; font-size: 13px; color: #856404; margin-bottom: 1rem; }
+.setup-warn code { background: #ffeaa0; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<!-- =====================================================
+     ★ ここにGoogle Apps ScriptのデプロイURLを貼る ★
+     例: https://script.google.com/macros/s/XXXXX/exec
+====================================================== -->
+<script>
+const GAS_URL = 'https://script.google.com/a/macros/habilis-co.jp/s/AKfycbzTlfhusf4uP7xzKb7EeD7Xsw_geXM4HtYFK0Gy2inaa_8piQwyo2JlF3N70CQ0lmCa/exec';
+</script>
+
+<div class="app">
+  <div class="header">
+    <h1>通勤交通費申請システム</h1>
+    <div class="mode-toggle">
+      <button class="mode-btn active" onclick="switchMode('emp',this)">社員申請</button>
+      <button class="mode-btn" onclick="switchMode('adm',this)">管理者</button>
+    </div>
+  </div>
+
+  <div id="setup-warn" class="setup-warn" style="display:none">
+    GAS_URL が未設定です。このHTMLファイルの先頭にある <code>GAS_URL</code> に
+    Google Apps Script のデプロイURLを貼り付けてください。
+    それまではデモデータで動作します。
+  </div>
+
+  <!-- ==================== 社員申請画面 ==================== -->
+  <div id="emp-view">
+
+    <div class="card">
+      <div class="sec">Google Maps API（任意）</div>
+      <input type="password" id="apikey" placeholder="APIキーを入力するとリアルルートを取得（未入力はデモデータ）">
+    </div>
+
+    <div class="card">
+      <div class="sec">申請者情報</div>
+      <div class="row2">
+        <div class="fg"><label>氏名</label><input id="name" placeholder="山田 太郎"></div>
+        <div class="fg"><label>社員番号</label><input id="empid" placeholder="EMP-0001"></div>
+      </div>
+      <div class="row2">
+        <div class="fg"><label>部署</label><input id="dept" placeholder="営業部"></div>
+        <div class="fg"><label>申請開始月</label><input type="month" id="startmonth"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">ルート検索</div>
+      <div class="row2 full">
+        <div class="fg"><label>自宅住所（出発地）</label>
+          <input id="origin" placeholder="例：東京都世田谷区三軒茶屋1-1-1"></div>
+      </div>
+      <div class="row2">
+        <div class="fg"><label>勤務先事業所</label>
+          <select id="office"><option value="">読み込み中...</option></select>
+        </div>
+        <div class="fg"><label>月の出勤日数</label>
+          <input type="number" id="workdays" value="20" min="1" max="31"></div>
+      </div>
+      <button class="btn-search" id="searchbtn" onclick="doSearch()">最安ルートを検索</button>
+
+      <div class="route-box" id="routebox">
+        <div class="route-head">
+          <span id="rtitle" style="font-size:13px;font-weight:600">最安ルート</span>
+          <span class="route-fare" id="rfare">片道 ¥0</span>
+        </div>
+        <ul class="steps" id="rsteps"></ul>
+        <p style="font-size:12px;color:#999;margin-top:5px" id="rdur"></p>
+
+        <div class="divider"></div>
+        <div class="sec">費用タイプを選択</div>
+        <div class="type-selector">
+          <div class="type-card selected" id="tc-daily" onclick="selectType('daily')">
+            <div class="tc-title">都度払い</div>
+            <div class="tc-desc">片道運賃×2×出勤日数</div>
+          </div>
+          <div class="type-card" id="tc-teiki" onclick="selectType('teiki')">
+            <div class="tc-title">定期券</div>
+            <div class="tc-desc">1・3・6ヶ月から選択</div>
+          </div>
+        </div>
+
+        <div id="compare-area"></div>
+
+        <div id="daily-section">
+          <div class="summary-area">
+            <div class="sum-row"><span>片道運賃</span><span id="d-oneway">¥0</span></div>
+            <div class="sum-row"><span>出勤日数</span><span id="d-days">0日</span></div>
+            <div class="sum-row total"><span>月額交通費</span>
+              <span id="d-total" style="color:#1a5fa5">¥0</span></div>
+          </div>
+        </div>
+
+        <div class="teiki-section" id="teiki-section">
+          <div class="sec" style="margin-bottom:6px">定期券区間・金額を入力</div>
+          <div class="period-tabs">
+            <button class="ptab active" onclick="setPeriod(1,this)">1ヶ月</button>
+            <button class="ptab" onclick="setPeriod(3,this)">3ヶ月</button>
+            <button class="ptab" onclick="setPeriod(6,this)">6ヶ月</button>
+          </div>
+          <div class="row2">
+            <div class="fg"><label>定期券購入金額（円）</label>
+              <input type="number" id="teiki-price" placeholder="例：10500" oninput="calcTeiki()"></div>
+            <div class="fg"><label>有効期間</label>
+              <input id="teiki-period-disp" readonly style="background:#f5f5f5"></div>
+          </div>
+          <div class="summary-area" id="teiki-summary"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec">備考・申請</div>
+      <div class="row2 full">
+        <div class="fg"><label>特記事項（任意）</label>
+          <input id="note" placeholder="定期券番号、購入予定日など"></div>
+      </div>
+      <button class="btn-primary" onclick="doSubmit()">申請を送信する</button>
+    </div>
+
+  </div><!-- /emp-view -->
+
+  <!-- ==================== 管理者画面 ==================== -->
+  <div id="adm-view" style="display:none">
+    <div class="smr">
+      <div class="sc"><div class="sl">申請件数</div><div class="sv sv-blue" id="a-total">-</div></div>
+      <div class="sc"><div class="sl">承認待ち</div><div class="sv sv-amber" id="a-pending">-</div></div>
+      <div class="sc"><div class="sl">承認済み合計（¥）</div><div class="sv sv-green" id="a-sum">-</div></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="sec" style="margin:0">申請一覧</div>
+        <div style="display:flex;gap:6px">
+          <input type="month" id="adm-month" style="width:auto">
+          <select id="adm-status" style="width:auto">
+            <option value="">全件</option>
+            <option value="承認待ち">承認待ち</option>
+            <option value="承認済み">承認済み</option>
+            <option value="却下">却下</option>
+          </select>
+          <button class="btn-outline" onclick="loadApplications()">絞り込み</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <colgroup>
+            <col style="width:75px"><col style="width:65px"><col style="width:60px">
+            <col style="width:85px"><col style="width:65px"><col style="width:72px">
+            <col style="width:72px"><col style="width:110px">
+          </colgroup>
+          <thead>
+            <tr><th>氏名</th><th>社員番号</th><th>申請月</th><th>事業所</th>
+                <th>タイプ</th><th>金額</th><th>状態</th><th>操作</th></tr>
+          </thead>
+          <tbody id="adm-tbody">
+            <tr><td colspan="8" class="empty">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ジョブカン連携 -->
+    <div class="card">
+      <div class="jc-head">
+        <div class="jc-logo">JC</div>
+        <div>
+          <div style="font-size:15px;font-weight:600">ジョブカン労務HR 連携</div>
+          <div style="font-size:12px;color:#777">承認済みデータをCSV出力 → ジョブカンへインポート</div>
+        </div>
+      </div>
+      <div class="jc-panel">
+        <div class="filter-row">
+          <label>対象月</label>
+          <input type="month" id="exp-month">
+          <label>対象</label>
+          <select id="exp-status">
+            <option value="承認済み">承認済みのみ</option>
+            <option value="">全件</option>
+          </select>
+          <button class="btn-outline" onclick="refreshPreview()">プレビュー更新</button>
+        </div>
+        <div class="preview-box">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:6px">
+            <span>CSVプレビュー <span class="count-pill" id="preview-count">0件</span></span>
+            <span>ジョブカン労務HR 通勤手当インポート形式</span>
+          </div>
+          <div class="csv-pre" id="csv-preview">対象データがありません</div>
+        </div>
+        <div class="warn-box" id="warn-box" style="display:none"></div>
+        <button class="btn-dl" id="dl-btn" onclick="downloadCSV()" disabled>
+          CSVをダウンロード（ジョブカン労務HR用）
+        </button>
+      </div>
+      <div class="info-box" style="margin-top:10px">
+        ジョブカン労務HRの「従業員情報 → 一括登録」からこのCSVをインポートしてください。
+        スタッフコード（社員番号）で自動照合されます。
+      </div>
+    </div>
+
+  </div><!-- /adm-view -->
+</div><!-- /app -->
+
+<!-- 承認モーダル -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3 id="modal-title">申請詳細</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn-modal-ok"    onclick="execApprove()">承認する</button>
+      <button class="btn-modal-ng"    onclick="execReject()">却下する</button>
+      <button class="btn-modal-close" onclick="closeModal()">閉じる</button>
+    </div>
+    <textarea id="admin-note" rows="2" placeholder="担当者メモ（任意）" style="width:100%;margin-top:8px;border-radius:6px;border:1px solid #ddd;padding:6px 8px;font-size:13px"></textarea>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// =====================================================
+// デモ用データ（GAS_URLが未設定の場合に使用）
+// =====================================================
+const DEMOS_ROUTE = {
+  '東京都渋谷区渋谷2-21-1':              { fare:210, dur:28, steps:['田園都市線（三軒茶屋→渋谷）'],         teiki:{1:10290,3:29370,6:55650} },
+  '東京都新宿区西新宿1-1-1':             { fare:180, dur:22, steps:['中央線（吉祥寺→新宿）'],               teiki:{1:8820, 3:25170,6:47670} },
+  '東京都千代田区丸の内1-1-1':           { fare:240, dur:35, steps:['東急東横線（自由が丘→渋谷）','JR山手線（渋谷→東京）'], teiki:{1:11760,3:33540,6:63630} },
+  '神奈川県横浜市西区みなとみらい2-2-1': { fare:380, dur:52, steps:['東急東横線（学芸大学→横浜）','みなとみらい線（横浜→みなとみらい）'], teiki:{1:18620,3:53070,6:100530} },
+};
+const DEMO_APPS = [
+  { id:'APP-001', submittedAt:'2026/04/01 10:00', name:'山田 太郎', empid:'EMP-001', dept:'営業部',  month:'2026-04', origin:'東京都世田谷区三軒茶屋1-1-1', officeName:'本社（渋谷）',   fare:210, workDays:20, type:'daily',  periodLabel:'',  monthlyAmount:8400,  teikiPrice:0,     steps:['田園都市線（三軒茶屋→渋谷）'], dur:28, note:'', status:'承認待ち', approvedAt:'', adminNote:'' },
+  { id:'APP-002', submittedAt:'2026/04/02 09:30', name:'鈴木 花子', empid:'EMP-002', dept:'総務部',  month:'2026-04', origin:'東京都新宿区西新宿3-1-1',       officeName:'本社（渋谷）',   fare:180, workDays:20, type:'teiki', periodLabel:'3',  monthlyAmount:25170, teikiPrice:25170, steps:['中央線（新宿→渋谷）'],           dur:22, note:'定期継続', status:'承認済み', approvedAt:'2026/04/03', adminNote:'' },
+  { id:'APP-003', submittedAt:'2026/04/03 11:00', name:'田中 次郎', empid:'EMP-003', dept:'開発部',  month:'2026-04', origin:'神奈川県川崎市高津区1-1-1',     officeName:'丸の内オフィス', fare:240, workDays:18, type:'daily',  periodLabel:'',  monthlyAmount:8640,  teikiPrice:0,     steps:['南武線（武蔵溝ノ口→川崎）','JR（川崎→東京）'], dur:42, note:'', status:'承認待ち', approvedAt:'', adminNote:'' },
+];
+const DEMO_OFFICES = [
+  { name:'本社（渋谷）',   address:'東京都渋谷区渋谷2-21-1' },
+  { name:'新宿オフィス',   address:'東京都新宿区西新宿1-1-1' },
+  { name:'丸の内オフィス', address:'東京都千代田区丸の内1-1-1' },
+  { name:'横浜オフィス',   address:'神奈川県横浜市西区みなとみらい2-2-1' },
+];
+
+// =====================================================
+// 状態
+// =====================================================
+let route = null, selType = 'daily', selPeriod = 1;
+let allApps = [...DEMO_APPS];
+let modalApp = null;
+const isDemo = () => !GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE';
+
+// =====================================================
+// 初期化
+// =====================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const now = new Date();
+  document.getElementById('startmonth').value = now.toISOString().slice(0,7);
+  document.getElementById('adm-month').value  = now.toISOString().slice(0,7);
+  document.getElementById('exp-month').value  = now.toISOString().slice(0,7);
+  document.getElementById('teiki-period-disp').value = '1ヶ月';
+
+  if (isDemo()) document.getElementById('setup-warn').style.display = 'block';
+  loadOffices();
+});
+
+// =====================================================
+// ユーティリティ
+// =====================================================
+function toast(m) {
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function gasGet(params) {
+  if (isDemo()) return null;
+  const url = GAS_URL + '?' + new URLSearchParams(params);
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function gasPost(body) {
+  if (isDemo()) return null;
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+// =====================================================
+// モード切替
+// =====================================================
+function switchMode(m, el) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('emp-view').style.display = m === 'emp' ? 'block' : 'none';
+  document.getElementById('adm-view').style.display = m === 'adm' ? 'block' : 'none';
+  if (m === 'adm') { loadApplications(); refreshPreview(); }
+}
+
+// =====================================================
+// 事業所読み込み
+// =====================================================
+async function loadOffices() {
+  let offices = DEMO_OFFICES;
+  if (!isDemo()) {
+    const res = await gasGet({ action: 'getOffices' });
+    if (res && res.offices) offices = res.offices;
+  }
+  const sel = document.getElementById('office');
+  sel.innerHTML = '<option value="">選択してください</option>'
+    + offices.map(o => `<option value="${o.address}|${o.name}">${o.name}</option>`).join('');
+}
+
+// =====================================================
+// ルート検索
+// =====================================================
+async function doSearch() {
+  const orig    = document.getElementById('origin').value.trim();
+  const offVal  = document.getElementById('office').value;
+  const apiKey  = document.getElementById('apikey').value.trim();
+  const workDays = parseInt(document.getElementById('workdays').value) || 20;
+  if (!orig)   { toast('自宅住所を入力してください'); return; }
+  if (!offVal) { toast('事業所を選択してください'); return; }
+  const [offAddr, offName] = offVal.split('|');
+
+  const btn = document.getElementById('searchbtn');
+  btn.innerHTML = '<span class="spinner"></span>検索中...'; btn.disabled = true;
+
+  let data;
+  if (apiKey) {
+    data = await fetchGoogleRoute(orig, offAddr, apiKey);
+  } else {
+    await new Promise(r => setTimeout(r, 900));
+    data = getDemoRoute(offAddr);
+  }
+
+  btn.innerHTML = '最安ルートを検索'; btn.disabled = false;
+  if (!data) { toast('ルート取得に失敗しました。住所を確認してください。'); return; }
+
+  route = { ...data, offAddr, offName, workDays };
+  route.monthlyAmount = data.fare * 2 * workDays;
+  renderRoute();
+}
+
+async function fetchGoogleRoute(orig, dest, key) {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(orig)}&destination=${encodeURIComponent(dest)}&mode=transit&transit_mode=rail&language=ja&key=${key}`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.status !== 'OK') return null;
+    const leg   = d.routes[0].legs[0];
+    const steps = leg.steps.filter(s => s.travel_mode === 'TRANSIT')
+      .map(s => `${s.transit_details.line.name}（${s.transit_details.departure_stop.name}→${s.transit_details.arrival_stop.name}）`);
+    const fare  = d.routes[0].fare ? d.routes[0].fare.value : estFare(leg.distance.value);
+    return { fare, dur: Math.round(leg.duration.value / 60), steps: steps.length ? steps : [orig + '→' + dest], teiki: { 1: null, 3: null, 6: null } };
+  } catch(e) { return null; }
+}
+
+function getDemoRoute(addr) {
+  const d = DEMOS_ROUTE[addr];
+  return d ? { fare: d.fare, dur: d.dur, steps: d.steps, teiki: d.teiki }
+           : { fare: 210, dur: 25, steps: ['電車'], teiki: { 1: null, 3: null, 6: null } };
+}
+
+function estFare(m) {
+  if (m < 3000)  return 150;
+  if (m < 10000) return 210;
+  if (m < 20000) return 330;
+  if (m < 40000) return 550;
+  return 770;
+}
+
+function renderRoute() {
+  document.getElementById('rtitle').textContent = '最安ルート' + (isDemo() ? '（デモ）' : '');
+  document.getElementById('rfare').textContent  = `片道 ¥${route.fare.toLocaleString()}`;
+  document.getElementById('rdur').textContent   = `所要時間：約${route.dur}分`;
+  const ul = document.getElementById('rsteps'); ul.innerHTML = '';
+  route.steps.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="si">${i+1}</span>${s}`;
+    ul.appendChild(li);
+  });
+  document.getElementById('routebox').classList.add('show');
+  renderCompare(); renderDailySum();
+}
+
+// =====================================================
+// 費用比較
+// =====================================================
+function renderCompare() {
+  const daily = route.fare * 2 * route.workDays;
+  const items = [{ label: '都度払い（月）', amount: daily, note: `¥${route.fare.toLocaleString()}×2×${route.workDays}日` }];
+  [1, 3, 6].forEach(p => {
+    const t = route.teiki[p];
+    if (t) {
+      const monthly = Math.round(t / p);
+      items.push({ label: `${p}ヶ月定期（月換算）`, amount: monthly, note: `¥${t.toLocaleString()}÷${p}ヶ月` });
+    }
+  });
+  const min = Math.min(...items.map(i => i.amount));
+  document.getElementById('compare-area').innerHTML = '<div class="compare-grid">'
+    + items.map(it => {
+      const best = it.amount === min;
+      return `<div class="cmp-card${best ? ' best' : ''}">
+        <div class="cmp-label">${it.label}</div>
+        <div class="cmp-amount">¥${it.amount.toLocaleString()}<span style="font-size:11px;font-weight:400">/月</span></div>
+        ${best ? '<div class="best-badge">最もお得</div>' : ''}
+        <div class="cmp-note">${it.note}</div>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+function selectType(t) {
+  selType = t;
+  document.getElementById('tc-daily').classList.toggle('selected', t === 'daily');
+  document.getElementById('tc-teiki').classList.toggle('selected', t === 'teiki');
+  document.getElementById('daily-section').style.display = t === 'daily' ? 'block' : 'none';
+  document.getElementById('teiki-section').classList.toggle('show', t === 'teiki');
+  if (t === 'daily') renderDailySum();
+  if (t === 'teiki') setPeriod(selPeriod, null);
+}
+
+function renderDailySum() {
+  if (!route) return;
+  document.getElementById('d-oneway').textContent = `¥${route.fare.toLocaleString()}`;
+  document.getElementById('d-days').textContent   = `${route.workDays}日`;
+  document.getElementById('d-total').textContent  = `¥${(route.fare*2*route.workDays).toLocaleString()}`;
+}
+
+function setPeriod(p, btn) {
+  selPeriod = p;
+  document.querySelectorAll('.ptab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else document.querySelectorAll('.ptab').forEach(b => { if (b.textContent.startsWith(p)) b.classList.add('active'); });
+  document.getElementById('teiki-period-disp').value = p + 'ヶ月';
+  const preset = route && route.teiki && route.teiki[p];
+  if (preset) document.getElementById('teiki-price').value = preset;
+  calcTeiki();
+}
+
+function calcTeiki() {
+  if (!route) return;
+  const price   = parseInt(document.getElementById('teiki-price').value) || 0;
+  const monthly = selPeriod > 0 ? Math.round(price / selPeriod) : 0;
+  const daily   = route.fare * 2 * route.workDays;
+  const diff    = daily - monthly;
+  document.getElementById('teiki-summary').innerHTML = `
+    <div class="sum-row"><span>定期券購入金額</span><span>¥${price.toLocaleString()}</span></div>
+    <div class="sum-row"><span>有効期間</span><span>${selPeriod}ヶ月</span></div>
+    <div class="sum-row"><span>月換算金額</span><span>¥${monthly.toLocaleString()}</span></div>
+    <div class="sum-row"><span>都度払いとの差額</span>
+      <span style="color:${diff>0?'#3b6d11':'#a32d2d'}">${diff>0?'-':'+'}¥${Math.abs(diff).toLocaleString()}/月</span></div>
+    <div class="sum-row total"><span>申請金額（${selPeriod}ヶ月分）</span>
+      <span style="color:#1a5fa5">¥${price.toLocaleString()}</span></div>`;
+}
+
+// =====================================================
+// 申請送信
+// =====================================================
+async function doSubmit() {
+  const name = document.getElementById('name').value.trim();
+  if (!name)  { toast('氏名を入力してください'); return; }
+  if (!route) { toast('先にルート検索を行ってください'); return; }
+
+  let amount, typeLabel, periodLabel = '';
+  if (selType === 'daily') {
+    amount = route.fare * 2 * route.workDays; typeLabel = '都度払い';
+  } else {
+    const price = parseInt(document.getElementById('teiki-price').value) || 0;
+    if (!price) { toast('定期券金額を入力してください'); return; }
+    amount = price; typeLabel = '定期券'; periodLabel = String(selPeriod);
+  }
+
+  const payload = {
+    action: 'submitApplication',
+    name, empid: document.getElementById('empid').value.trim(),
+    dept:  document.getElementById('dept').value.trim(),
+    month: document.getElementById('startmonth').value,
+    origin: document.getElementById('origin').value.trim(),
+    officeName: route.offName, officeAddr: route.offAddr,
+    fare: route.fare, workDays: route.workDays,
+    type: selType, typeLabel, periodLabel, monthlyAmount: amount,
+    teikiPrice: selType === 'teiki' ? amount : 0,
+    steps: route.steps, dur: route.dur,
+    note: document.getElementById('note').value.trim(),
+  };
+
+  if (!isDemo()) {
+    const res = await gasPost(payload);
+    if (!res || !res.success) { toast('送信に失敗しました。再度お試しください。'); return; }
+  } else {
+    const id = 'APP-' + Date.now();
+    allApps.unshift({ ...payload, id, status: '承認待ち', submittedAt: new Date().toLocaleString('ja-JP'), approvedAt: '', adminNote: '' });
+  }
+
+  toast('申請を送信しました！');
+  ['name','empid','dept','note','origin','teiki-price'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('office').value = '';
+  document.getElementById('routebox').classList.remove('show');
+  route = null; selType = 'daily';
+  document.getElementById('tc-daily').classList.add('selected');
+  document.getElementById('tc-teiki').classList.remove('selected');
+  document.getElementById('daily-section').style.display = 'block';
+  document.getElementById('teiki-section').classList.remove('show');
+}
+
+// =====================================================
+// 管理者：申請一覧読み込み
+// =====================================================
+async function loadApplications() {
+  const month  = document.getElementById('adm-month').value;
+  const status = document.getElementById('adm-status').value;
+
+  let apps;
+  if (!isDemo()) {
+    const res = await gasGet({ action: 'getApplications', month, status });
+    apps = res && res.applications ? res.applications : [];
+    allApps = apps;
+  } else {
+    apps = allApps.filter(a => {
+      return (!month || a.month === month) && (!status || a.status === status);
+    });
+  }
+
+  const pending  = apps.filter(a => a.status === '承認待ち').length;
+  const sumAmt   = apps.filter(a => a.status === '承認済み').reduce((s,a) => s + Number(a.monthlyAmount || a.teikiPrice || 0), 0);
+  document.getElementById('a-total').textContent   = apps.length;
+  document.getElementById('a-pending').textContent = pending;
+  document.getElementById('a-sum').textContent     = sumAmt.toLocaleString();
+
+  const tbody = document.getElementById('adm-tbody');
+  if (!apps.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">申請データがありません</td></tr>'; return; }
+
+  tbody.innerHTML = apps.map(a => {
+    const bcls  = a.status === '承認待ち' ? 'bp' : a.status === '承認済み' ? 'ba' : 'br';
+    const typeD = (a.typeLabel || a.type) + (a.periodLabel ? `(${a.periodLabel}ヶ月)` : '');
+    const amt   = Number(a.monthlyAmount || a.teikiPrice || 0);
+    const btns  = a.status === '承認待ち'
+      ? `<div class="ab">
+           <button class="bok" onclick="openModal('${a.id}')">確認</button>
+         </div>`
+      : `<span style="font-size:11px;color:#aaa">${String(a.submittedAt).slice(0,10)}</span>`;
+    return `<tr>
+      <td>${a.name}</td><td>${a.empid||'-'}</td><td>${a.month||'-'}</td>
+      <td>${a.officeName||'-'}</td><td>${typeD}</td>
+      <td>¥${amt.toLocaleString()}</td>
+      <td><span class="badge ${bcls}">${a.status}</span></td>
+      <td>${btns}</td>
+    </tr>`;
+  }).join('');
+
+  refreshPreview();
+}
+
+// =====================================================
+// モーダル（承認・却下）
+// =====================================================
+function openModal(id) {
+  modalApp = allApps.find(a => a.id === id);
+  if (!modalApp) return;
+  document.getElementById('modal-title').textContent = `${modalApp.name}さんの申請`;
+  const amt = Number(modalApp.monthlyAmount || modalApp.teikiPrice || 0);
+  const typeD = (modalApp.typeLabel || modalApp.type) + (modalApp.periodLabel ? `(${modalApp.periodLabel}ヶ月)` : '');
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-row"><span class="ml">社員番号</span><span>${modalApp.empid||'-'}</span></div>
+    <div class="modal-row"><span class="ml">部署</span><span>${modalApp.dept||'-'}</span></div>
+    <div class="modal-row"><span class="ml">申請月</span><span>${modalApp.month||'-'}</span></div>
+    <div class="modal-row"><span class="ml">自宅住所</span><span style="font-size:11px">${modalApp.origin||'-'}</span></div>
+    <div class="modal-row"><span class="ml">事業所</span><span>${modalApp.officeName||'-'}</span></div>
+    <div class="modal-row"><span class="ml">申請タイプ</span><span>${typeD}</span></div>
+    <div class="modal-row"><span class="ml">月額 / 申請額</span><span style="font-weight:600;color:#1a5fa5">¥${amt.toLocaleString()}</span></div>
+    <div class="modal-row"><span class="ml">所要時間</span><span>約${modalApp.dur||'-'}分</span></div>
+    <div class="modal-row"><span class="ml">ルート</span><span style="font-size:11px">${(modalApp.steps||[]).join(' → ')}</span></div>
+    <div class="modal-row"><span class="ml">備考</span><span>${modalApp.note||'-'}</span></div>
+    <div class="modal-row"><span class="ml">申請日時</span><span>${modalApp.submittedAt||'-'}</span></div>`;
+  document.getElementById('admin-note').value = '';
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('show'); modalApp = null; }
+
+async function execApprove() { await updateStatus('承認済み'); }
+async function execReject()  { await updateStatus('却下'); }
+
+async function updateStatus(status) {
+  if (!modalApp) return;
+  const adminNote = document.getElementById('admin-note').value.trim();
+  if (!isDemo()) {
+    const res = await gasPost({ action: 'updateStatus', id: modalApp.id, status, adminNote });
+    if (!res || !res.success) { toast('更新に失敗しました'); return; }
+  } else {
+    const a = allApps.find(a => a.id === modalApp.id);
+    if (a) { a.status = status; a.approvedAt = new Date().toLocaleString('ja-JP'); a.adminNote = adminNote; }
+  }
+  toast(status === '承認済み' ? '承認しました' : '却下しました');
+  closeModal();
+  loadApplications();
+}
+
+// =====================================================
+// CSVエクスポート
+// =====================================================
+function getExportTargets() {
+  const month  = document.getElementById('exp-month').value;
+  const status = document.getElementById('exp-status').value;
+  return allApps.filter(a => {
+    return (!month || a.month === month) && (!status || a.status === status);
+  });
+}
+
+function buildCSV(targets) {
+  const rows = [
+    ['スタッフコード','姓','名','通勤手段',
+     '交通機関利用区間（出発地）','交通機関利用区間（到着地）',
+     '片道運賃（円）','月額交通費（円）','定期券区分','定期券期間（ヶ月）',
+     '申請月','承認日','備考'].join(',')
+  ];
+  targets.forEach(a => {
+    const parts = a.name.split(/\s+/);
+    const sei   = parts[0] || a.name, mei = parts[1] || '';
+    const amt   = a.type === 'teiki' ? a.teikiPrice : a.monthlyAmount;
+    rows.push([
+      a.empid||'', `"${sei}"`, `"${mei}"`, '電車',
+      `"${a.origin||''}"`, `"${a.officeName||''}"`,
+      a.fare||0, amt||0,
+      a.type === 'teiki' ? '定期' : '都度',
+      a.periodLabel||'',
+      a.month||'',
+      a.approvedAt ? String(a.approvedAt).slice(0,10) : '',
+      `"${a.note||''}"`,
+    ].join(','));
+  });
+  return rows;
+}
+
+function refreshPreview() {
+  const targets = getExportTargets();
+  const rows    = buildCSV(targets);
+  document.getElementById('preview-count').textContent = targets.length + '件';
+
+  const noId = targets.filter(a => !a.empid);
+  const wb   = document.getElementById('warn-box');
+  if (noId.length) {
+    wb.style.display = 'block';
+    wb.textContent   = `注意：社員番号未入力 ${noId.length}名（${noId.map(a=>a.name).join('、')}）— ジョブカンで照合できない場合があります。`;
+  } else {
+    wb.style.display = 'none';
+  }
+
+  document.getElementById('csv-preview').textContent = targets.length
+    ? rows.slice(0, 5).join('\n') + (rows.length > 5 ? '\n…' : '')
+    : '対象データがありません';
+  document.getElementById('dl-btn').disabled = !targets.length;
+}
+
+function downloadCSV() {
+  const targets = getExportTargets();
+  if (!targets.length) { toast('対象データがありません'); return; }
+  const bom   = '\uFEFF';
+  const csv   = bom + buildCSV(targets).join('\n');
+  const blob  = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  const month = (document.getElementById('exp-month').value || '').replace('-','');
+  a.href = url; a.download = `jobcan_tsukin_${month}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSVをダウンロードしました');
+}
+</script>
+</body>
+</html>
